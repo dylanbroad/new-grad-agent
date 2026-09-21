@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "new-grad-agent": {
+      "command": ".venv/bin/python3",
+      "args": ["mcp_server.py"],
+      "cwd": "."
+    }
+  }
+}

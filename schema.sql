@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS applications (
     status             TEXT NOT NULL DEFAULT 'found',  -- found -> applied -> interviewing -> offer/rejected
     jd_text            TEXT,
     resume_diff        TEXT,
+    similarity_score   INTEGER,
+    tailored_resume    TEXT,
     cover_letter_path  TEXT,
     created_at         TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at         TEXT NOT NULL DEFAULT (datetime('now'))

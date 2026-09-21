@@ -1,0 +1,106 @@
+{
+  "contact": {
+    "name": "Dylan Broad",
+    "email": "dzbroad@uwaterloo.ca",
+    "phone": "+1 (519) 860-8128",
+    "linkedin": "linkedin.com/in/dylan-broad"
+  },
+  "education": [
+    {
+      "school": "University of Waterloo",
+      "degree": "Bachelor of Applied Science in Computer Engineering",
+      "location": "Waterloo, ON",
+      "start": "Sep 2022",
+      "end": "Apr 2027",
+      "details": "Relevant Courses: Operating Systems (C), Computer Networks (Python), Database Systems (SQL), Compilers (Java), Systems Programming and Concurrency (C), Data Structures and Algorithms (C++), Object Oriented Programming (C++)"
+    }
+  ],
+  "skills": [
+    "Python", "C++", "C", "TypeScript", "JavaScript", "SQL", "Go",
+    "Django", "Flask", "FastAPI", "React", "Node.js", "Next.js", "Tailwind",
+    "Docker", "PostgreSQL", "Azure Data Explorer", "AWS", "Datadog", "Firebase", "Vercel", "Git"
+  ],
+  "jobs": [
+    {
+      "company": "Microsoft",
+      "title": "Software Engineering Intern",
+      "location": "Vancouver, BC",
+      "start": "May 2026",
+      "end": "Aug 2026",
+      "bullets": [
+        "Improved reliability of Excel Copilot's auditing skill by investigating bugs and overhauling the data ingestion pipeline, skill architecture, and output validation logic, increasing error detection consistency by 15%.",
+        "Built automated agent evals to measure error detection and output formatting using custom LLM-checklist grading criteria, replacing ad hoc testing and reducing evaluation time by 60%.",
+        "Refactored the Excel agent's telemetry pipeline by consolidating 4 Kusto tables into a single compact table capturing the full lifecycle of a Copilot query, reducing query time from 15 minutes to 5s."
+      ]
+    },
+    {
+      "company": "Abnormal AI",
+      "title": "Software Engineering Intern",
+      "location": "San Francisco, CA",
+      "start": "Jan 2026",
+      "end": "Apr 2026",
+      "bullets": [
+        "Implemented an asynchronous notification pipeline handling 100+ weekly email reclassification checks, introducing distributed caching and atomic compare-and-swap to prevent race conditions and eliminate duplicate notifications.",
+        "Architected a dedicated synchronous Go microservice for phishing mailbox connections, isolating it from the existing async architecture to eliminate silent failures that left mailboxes stalled for hours or days, reducing customer-reported support tickets.",
+        "Developed a secure email body viewer in Python, implementing backend filtering to surface only safe emails within a 30-day window, ensuring no unsafe content was exposed to the frontend."
+      ]
+    },
+    {
+      "company": "Super.com",
+      "title": "Software Engineering Intern",
+      "location": "San Francisco, CA",
+      "start": "May 2025",
+      "end": "Aug 2025",
+      "bullets": [
+        "Integrated Celery distributed task queues to manage asynchronous jobs for the Cash Advance system improving load-balancing and job wait times by 30%.",
+        "Implemented a full-stack account management system in Python using tRPC APIs, and Typescript frontend state machine supporting 100,000+ users to manage linked debit and bank accounts throughout their lifecycle.",
+        "Launched a debit repayment workflow by developing Flask services with PostgreSQL for secure transaction handling."
+      ]
+    },
+    {
+      "company": "Elbe.ai",
+      "title": "AI Software Developer Intern",
+      "location": "Coronado, CA",
+      "start": "Sep 2024",
+      "end": "Dec 2024",
+      "bullets": [
+        "Built a full-stack file management system using Next.js and Typescript with Firestore and Firebase Cloud Storage, featuring RBAC, JWT authentication and secure APIs for sensitive merger and acquisition (M&A) documents.",
+        "Engineered a retrieval-augmented generation (RAG) system to extract, vectorize and pre-process data from IRS tax returns, integrating Llama 3.1 to enable question-answering based on contextualized tax information.",
+        "Designed and implemented a document classification pipeline to categorize financial, legal, and tax documents, using text classification and logistic regression models with TF-IDF feature extraction, achieving a classification accuracy rate of 90%."
+      ]
+    },
+    {
+      "company": "OpenTools.ai",
+      "title": "Software Engineering Intern",
+      "location": "Toronto, ON",
+      "start": "Jan 2024",
+      "end": "Apr 2024",
+      "bullets": [
+        "Revamped the architecture of a website with 100,000+ daily users by migrating to Next.js, React and Node.js, integrating server-side rendering and client-side pre-fetching to reduce rendering time by 30% and load times by 20%.",
+        "Optimized backend infrastructure by applying promise-based asynchronous programming and data caching strategies to efficiently serve high-volume RESTful API requests, improving scalability and reducing response times by 30%."
+      ]
+    },
+    {
+      "company": "Nugget Data",
+      "title": "Software Developer Intern",
+      "location": "Toronto, ON",
+      "start": "May 2023",
+      "end": "Aug 2023",
+      "bullets": [
+        "Spearheaded the SDLC of a full-stack application for 100+ retailers enabling real-time inventory product comparison across pricing, selection, and quantity, achieving a 95% improvement in product analytics retrieval speed.",
+        "Refactored core service logic, Django ORM, and SQL queries to significantly enhance RESTful API performance, achieving sub-1-second response times and ensuring consistent responsiveness under increasing user load."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "ARM Cortex-M4 RTOS",
+      "tags": ["C", "Assembly", "Make", "GDB", "Valgrind", "GitLab"],
+      "bullets": [
+        "Developed a real-time OS on ARM Cortex-M4 supporting multi-threaded task execution and earliest deadline first scheduling.",
+        "Utilized low-level assembly routines to handle interrupts and facilitate rapid context switching between tasks."
+      ]
+    }
+  ],
+  "extracurriculars": []
+}

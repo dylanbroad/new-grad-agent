@@ -7,11 +7,20 @@ from contextlib import contextmanager
 DB_PATH = Path(__file__).parent / "copilot.db"
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
+_MIGRATIONS = [
+    "ALTER TABLE applications ADD COLUMN similarity_score INTEGER",
+    "ALTER TABLE applications ADD COLUMN tailored_resume TEXT",
+]
 
 def init_db() -> None:
     """Create tables if they don't exist. Safe to call on every startup."""
     with get_conn() as conn:
         conn.executescript(SCHEMA_PATH.read_text())
+        for migration in _MIGRATIONS:
+            try:
+                conn.execute(migration)
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
 
 @contextmanager
