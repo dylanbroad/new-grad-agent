@@ -1,10 +1,9 @@
 """Application WORKFLOW - predefined code path, per the workflow/agent split.
 
-Steps always run in this order. The LLM (inside diff_resume,
-optimize_resume_bullets, and draft_cover_letter) generates content, but
-never decides what happens next - that's decided here, in code. This is
-the correct shape for a task where the path forward is already fully
-known.
+Steps always run in this order. The LLM (inside diff_resume and
+optimize_resume_bullets) generates content, but never decides what
+happens next - that's decided here, in code. This is the correct shape
+for a task where the path forward is already fully known.
 
 The similarity-score branch is a plain if-statement, not the model
 deciding: diff_resume returns a number, and the workflow (not the LLM)
@@ -20,7 +19,6 @@ from tools.application_tools import (
     diff_resume,
     optimize_resume_bullets,
     render_resume_text,
-    draft_cover_letter,
     upsert_application,
     set_application_status,
 )
@@ -53,14 +51,9 @@ def run_application_intake(company: str, role: str, url: str) -> dict:
         print(resume_text)
     else:
         tailored_resume = None
-        resume_text = render_resume_text({"jobs": experience_bank.get("jobs", []),
-                                           "projects": experience_bank.get("projects", [])})
         print(f"\nSimilarity below {SIMILARITY_THRESHOLD} - skipping bullet optimization.")
 
-    # Step 4: generate
-    # cover_letter = draft_cover_letter(jd_text, resume_text, json.dumps(gap_analysis))
-
-    # Step 5: persist (idempotent on url_hash)
+    # Step 4: persist (idempotent on url_hash)
     application = upsert_application(
         company=company,
         role=role,
@@ -71,10 +64,7 @@ def run_application_intake(company: str, role: str, url: str) -> dict:
         tailored_resume=json.dumps(tailored_resume) if tailored_resume else "",
     )
 
-    # print("\n--- Cover letter draft ---")
-    # print(cover_letter)
-
-    # Step 6: human-approval gate - the workflow does NOT auto-advance status.
+    # Step 5: human-approval gate - the workflow does NOT auto-advance status.
     approve = input("\nMark this application as 'applied'? [y/N]: ").strip().lower()
     if approve == "y":
         application = set_application_status(url, "applied")

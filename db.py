@@ -10,6 +10,7 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 _MIGRATIONS = [
     "ALTER TABLE applications ADD COLUMN similarity_score INTEGER",
     "ALTER TABLE applications ADD COLUMN tailored_resume TEXT",
+    "ALTER TABLE applications DROP COLUMN cover_letter_path",
 ]
 
 def init_db() -> None:

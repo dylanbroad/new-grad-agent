@@ -238,13 +238,93 @@ def diff_resume(jd_text: str, experience_bank: dict) -> dict:
     return _llm_json_completion(system_prompt, user_content, max_tokens=1024)
 
 
+_NUMBER_PATTERN = re.compile(r"\d[\d,]*\.?\d*%?\+?")
+_OPTIMIZE_MAX_ATTEMPTS = 3
+
+# ~2 lines at the font/margins of the source resume template (measured off
+# the longest bullet that's known to wrap to exactly 2 lines in the PDF).
+_MAX_BULLET_CHARS = 220
+
+# Total bullets already known to fit on one page in the source resume
+# (3+3+3+3+2+2 across the 6 jobs, +2 for the one project = 18). This is a
+# fixed budget, not derived from the bank, because the bank is meant to
+# grow past one page's worth of content - once it does, staying on one
+# page becomes "pick which jobs/projects to include," not just "trim
+# bullets," which this function doesn't do yet.
+_MAX_TOTAL_BULLETS = 18
+
+
+def _extract_numbers(text: str) -> set[str]:
+    """Numeric tokens (percentages, counts, durations) for checking that
+    metrics survive a rewrite unchanged."""
+    return set(_NUMBER_PATTERN.findall(text))
+
+
+def _validate_tailored_resume(tailored: dict, experience_bank: dict) -> list[str]:
+    """Check the model's bullet selection against the hard rules in code,
+    rather than trusting the prompt alone. Returns violation descriptions
+    (empty list means clean)."""
+    violations = []
+    source_jobs = {j["company"]: j for j in experience_bank.get("jobs", [])}
+    source_projects = {p["name"]: p for p in experience_bank.get("projects", [])}
+    total_bullets = 0
+
+    def check_entries(entries: list[dict], sources: dict, key: str, label: str) -> None:
+        nonlocal total_bullets
+        for entry in entries:
+            name = entry.get(key, "")
+            source = sources.get(name)
+            if source is None:
+                violations.append(f"{label} '{name}' is not in the experience bank")
+                continue
+
+            bullets = entry.get("bullets", [])
+            total_bullets += len(bullets)
+            source_bullets = source.get("bullets", [])
+            if len(bullets) > len(source_bullets):
+                violations.append(
+                    f"{name}: output {len(bullets)} bullets but source only has {len(source_bullets)}"
+                )
+
+            source_numbers = _extract_numbers(" ".join(source_bullets))
+            for bullet in bullets:
+                extra = _extract_numbers(bullet) - source_numbers
+                if extra:
+                    violations.append(
+                        f"{name}: bullet has numbers not present in its source bullets "
+                        f"({', '.join(sorted(extra))}): \"{bullet}\""
+                    )
+                if len(bullet) > _MAX_BULLET_CHARS:
+                    violations.append(
+                        f"{name}: bullet is {len(bullet)} chars, over the {_MAX_BULLET_CHARS}-char "
+                        f"(~2 line) limit: \"{bullet}\""
+                    )
+
+    check_entries(tailored.get("jobs", []), source_jobs, "company", "job")
+    check_entries(tailored.get("projects", []), source_projects, "name", "project")
+
+    if total_bullets > _MAX_TOTAL_BULLETS:
+        violations.append(
+            f"resume has {total_bullets} bullets total, over the {_MAX_TOTAL_BULLETS}-bullet "
+            "one-page budget - cut the least JD-relevant bullets, keeping each job/project's "
+            "count in the same rough proportion"
+        )
+
+    return violations
+
+
 @logged_tool
 def optimize_resume_bullets(jd_text: str, experience_bank: dict, gap_analysis: dict) -> dict:
     """Pick and lightly rewrite the most relevant bullets for this JD.
 
     Selects a subset of each job/project's own bullets from the experience
     bank and tweaks wording/keywords to match the JD - never more bullets
-    than the source has, never a claim/number not already present in it.
+    than the source has, never a claim/number not already present in it,
+    each bullet short enough to hold to ~2 lines, and the whole resume
+    within a one-page bullet budget. _validate_tailored_resume checks all
+    of this in code and, if the model violates a rule, retries with the
+    specific violations fed back to it (up to _OPTIMIZE_MAX_ATTEMPTS)
+    rather than trusting the prompt alone.
 
     Only meaningful to call when diff_resume's similarity_score clears
     the workflow's threshold; the branch decision itself lives in
@@ -252,6 +332,9 @@ def optimize_resume_bullets(jd_text: str, experience_bank: dict, gap_analysis: d
 
     Returns: {"jobs": [{"company", "title", "bullets": [...]}],
               "projects": [{"name", "bullets": [...]}]}.
+
+    Raises ValueError if the model still violates the rules after
+    _OPTIMIZE_MAX_ATTEMPTS tries.
     """
     system_prompt = (
         "You tailor a candidate's resume bullets to a specific job description. "
@@ -266,6 +349,13 @@ def optimize_resume_bullets(jd_text: str, experience_bank: dict, gap_analysis: d
         "core claim isn't already in the source data.\n"
         "- Preserve every number, percentage, and metric from the source bullet "
         "you are rewording exactly as given - never drop, round, or alter them.\n"
+        f"- Keep every bullet under {_MAX_BULLET_CHARS} characters, so it holds to "
+        "about 2 lines on a resume - trim wording, don't drop the metric, if a "
+        "rewrite runs long.\n"
+        f"- Keep the total bullet count across every job and project at or under "
+        f"{_MAX_TOTAL_BULLETS}, so the whole resume still fits one page - if the "
+        "experience bank has more bullets available than that, favor the "
+        "jobs/projects most relevant to this JD and drop the rest.\n"
         "- You may reorder, reword, and re-emphasize, but never invent new facts, "
         "technologies, or accomplishments.\n\n"
         "Respond with ONLY a JSON object, no prose, no code fence, matching this "
@@ -278,7 +368,38 @@ def optimize_resume_bullets(jd_text: str, experience_bank: dict, gap_analysis: d
         f"Gap analysis:\n{json.dumps(gap_analysis)}\n\n"
         f"Experience bank:\n{json.dumps(experience_bank)}"
     )
-    return _llm_json_completion(system_prompt, user_content, max_tokens=2048)
+
+    violations = []
+    for attempt in range(_OPTIMIZE_MAX_ATTEMPTS):
+        if violations:
+            user_content += (
+                "\n\nYour previous attempt broke these hard rules - fix them and "
+                "resend the full JSON object:\n" + "\n".join(f"- {v}" for v in violations)
+            )
+        tailored = _llm_json_completion(system_prompt, user_content, max_tokens=2048)
+        violations = _validate_tailored_resume(tailored, experience_bank)
+        if not violations:
+            return _reorder_to_match_bank(tailored, experience_bank)
+
+    raise ValueError(
+        f"optimize_resume_bullets still violated hard rules after {_OPTIMIZE_MAX_ATTEMPTS} attempts: {violations}"
+    )
+
+
+def _reorder_to_match_bank(tailored: dict, experience_bank: dict) -> dict:
+    """Put jobs/projects back in the experience bank's own order.
+
+    The model's JSON key order isn't guaranteed to match the bank's
+    (reverse-chronological) order, and resume formatting should never
+    depend on that - so re-sort by the bank's order rather than trusting
+    whatever order came back.
+    """
+    job_order = [j["company"] for j in experience_bank.get("jobs", [])]
+    project_order = [p["name"] for p in experience_bank.get("projects", [])]
+
+    jobs = sorted(tailored.get("jobs", []), key=lambda j: job_order.index(j["company"]))
+    projects = sorted(tailored.get("projects", []), key=lambda p: project_order.index(p["name"]))
+    return {**tailored, "jobs": jobs, "projects": projects}
 
 
 def render_resume_text(tailored_resume: dict, experience_bank: dict | None = None) -> str:
@@ -312,12 +433,6 @@ def render_resume_text(tailored_resume: dict, experience_bank: dict | None = Non
         lines.append("")
 
     return "\n".join(lines).strip()
-
-
-# @logged_tool
-# def draft_cover_letter(jd_text: str, resume_text: str, gap_analysis: str) -> str:
-#     """Draft a tailored cover letter. TODO: single LLM call."""
-#     return "[STUB] cover letter draft"
 
 
 def _hash_url(url: str) -> str:
