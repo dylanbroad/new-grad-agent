@@ -9,6 +9,7 @@ you're still filling things in.
 from datetime import datetime, timedelta
 
 from db import get_conn
+from tools.llm_utils import llm_json_completion
 from tools.logging_utils import logged_tool
 
 
@@ -16,13 +17,33 @@ from tools.logging_utils import logged_tool
 def fetch_company_info(company: str) -> dict:
     """Pull recent, relevant info about a company (eng blog, news, product focus).
 
-    TODO: replace with a real web_search / web_fetch call. Returning a stub
-    for now so the agent loop is runnable end-to-end before that's wired up.
+    This is the model's own knowledge, not a live web search - an actual
+    live search needs either a paid search API or scraping search-result
+    pages, and a quick test of the free option (DuckDuckGo's HTML
+    endpoint, no API key) got flagged as "anomalous traffic" and blocked
+    outright rather than returning real results. So this is honest about
+    what it is: good enough to ground question generation for well-known
+    companies, but not fresh news, and unreliable for obscure ones.
     """
+    system_prompt = (
+        "You are grounding interview-question generation with what you already "
+        "know about a company's engineering org and recent product focus. "
+        "Answer from your own knowledge only - you have no live web access, so "
+        "don't claim anything is 'recent' or 'current' as of today. If you "
+        "don't know much about this company, say so plainly instead of "
+        "inventing specifics. Respond with ONLY a JSON object, no prose, no "
+        "code fence, matching this exact shape:\n"
+        '{"summary": "<3-5 sentences on engineering org, tech stack, product '
+        'focus, anything relevant to interview prep>", '
+        '"confidence": "<high|medium|low - how well you actually know this company>"}'
+    )
+    user_content = f"Company: {company}"
+    result = llm_json_completion(system_prompt, user_content, max_tokens=512)
     return {
         "company": company,
-        "summary": f"[STUB] Recent engineering focus areas for {company} go here.",
-        "source": "stub",
+        "summary": result.get("summary", ""),
+        "confidence": result.get("confidence", "low"),
+        "source": "model knowledge (not live search)",
     }
 
 
@@ -30,14 +51,27 @@ def fetch_company_info(company: str) -> dict:
 def generate_questions(company: str, role: str, topic: str | None = None, n: int = 3) -> list[dict]:
     """Generate n likely interview questions, optionally focused on one topic.
 
-    TODO: replace with an LLM call (can be a *separate*, cheaper model call -
-    this is content generation, not agent reasoning, so it doesn't need to be
-    part of the agent's own tool-use loop).
+    Single LLM call - content generation, not agent reasoning, so it
+    doesn't need to be part of the agent's own tool-use loop.
     """
-    focus = topic or "general"
+    system_prompt = (
+        "You write technical interview questions. Respond with ONLY a JSON "
+        "object, no prose, no code fence, matching this exact shape:\n"
+        '{"questions": [{"topic": "<short topic label>", "prompt": '
+        '"<the full question text>"}, ...]}\n'
+        "Each question should be answerable out loud in a few minutes, "
+        "appropriate for a new-grad-level candidate, and specific enough to "
+        "actually evaluate - not generic filler."
+    )
+    user_content = f"Company: {company}\nRole: {role}\nNumber of questions: {n}"
+    if topic:
+        user_content += f"\nFocus specifically on: {topic}"
+
+    result = llm_json_completion(system_prompt, user_content, max_tokens=1024)
+    questions = result.get("questions", [])[:n]
     return [
-        {"id": f"q{i}", "topic": focus, "prompt": f"[STUB] {focus} question #{i} for {role} at {company}"}
-        for i in range(1, n + 1)
+        {"id": f"q{i}", "topic": q.get("topic", topic or "general"), "prompt": q.get("prompt", "")}
+        for i, q in enumerate(questions, start=1)
     ]
 
 

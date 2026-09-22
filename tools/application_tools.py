@@ -8,21 +8,17 @@ next" would add cost and unpredictability without benefit.
 
 import hashlib
 import json
-import os
 import re
 import time
 from pathlib import Path
 
-import anthropic
 import requests
 import trafilatura
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 
 from db import get_conn
+from tools.llm_utils import llm_json_completion  # also loads .env as a side effect
 from tools.logging_utils import logged_tool
-
-load_dotenv()
 
 NEW_GRAD_README_URL = (
     "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/README.md"
@@ -33,9 +29,6 @@ _FETCH_BACKOFF_SECONDS = 2
 _REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; new-grad-agent/1.0)"}
 
 EXPERIENCE_BANK_PATH = Path(__file__).parent.parent / "experience_bank.json"
-
-ANTHROPIC_MODEL = "claude-sonnet-4-6"
-GROQ_MODEL = "openai/gpt-oss-120b"
 
 
 @logged_tool
@@ -152,67 +145,6 @@ def render_experience_bank_text(experience_bank: dict) -> str:
     return "\n".join(lines)
 
 
-def _extract_json(text: str) -> dict:
-    """Pull the first JSON object out of a model response.
-
-    Models occasionally wrap JSON in prose or a code fence even when
-    told not to, so this is a defensive fallback around json.loads.
-    """
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if not match:
-            raise ValueError(f"no JSON object found in model response: {text[:200]}")
-        return json.loads(match.group(0))
-
-
-def _llm_completion(system_prompt: str, user_content: str, max_tokens: int) -> str:
-    """Single LLM call, on whichever provider is configured.
-
-    Prefers Anthropic (the project's real target) when ANTHROPIC_API_KEY is
-    set; falls back to Groq (OpenAI-compatible, cheap/free) when only
-    GROQ_API_KEY is set, for ad hoc testing without an Anthropic key.
-    """
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        response = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=max_tokens,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_content}],
-        )
-        return "".join(block.text for block in response.content if block.type == "text")
-    elif os.environ.get("GROQ_API_KEY"):
-        from groq import Groq  # optional dep, only needed for this fallback path
-
-        client = Groq(api_key=os.environ["GROQ_API_KEY"])
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            max_tokens=max_tokens,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-        )
-        return response.choices[0].message.content
-    else:
-        raise RuntimeError(
-            "no LLM provider configured - set ANTHROPIC_API_KEY (or GROQ_API_KEY for ad hoc testing)"
-        )
-
-
-def _llm_json_completion(system_prompt: str, user_content: str, max_tokens: int) -> dict:
-    """_llm_completion, parsed as JSON, with one retry at double the token
-    budget if the response got cut off mid-object (truncated JSON)."""
-    text = _llm_completion(system_prompt, user_content, max_tokens)
-    try:
-        return _extract_json(text)
-    except (ValueError, json.JSONDecodeError):
-        text = _llm_completion(system_prompt, user_content, max_tokens * 2)
-        return _extract_json(text)
-
-
 @logged_tool
 def diff_resume(jd_text: str, experience_bank: dict) -> dict:
     """Score how well the experience bank matches a JD and identify gaps.
@@ -235,7 +167,7 @@ def diff_resume(jd_text: str, experience_bank: dict) -> dict:
         '"summary": "<2-3 sentence gap analysis>"}'
     )
     user_content = f"Job description:\n{jd_text}\n\nCandidate experience:\n{resume_text}"
-    return _llm_json_completion(system_prompt, user_content, max_tokens=1024)
+    return llm_json_completion(system_prompt, user_content, max_tokens=1024)
 
 
 _NUMBER_PATTERN = re.compile(r"\d[\d,]*\.?\d*%?\+?")
@@ -376,7 +308,7 @@ def optimize_resume_bullets(jd_text: str, experience_bank: dict, gap_analysis: d
                 "\n\nYour previous attempt broke these hard rules - fix them and "
                 "resend the full JSON object:\n" + "\n".join(f"- {v}" for v in violations)
             )
-        tailored = _llm_json_completion(system_prompt, user_content, max_tokens=2048)
+        tailored = llm_json_completion(system_prompt, user_content, max_tokens=2048)
         violations = _validate_tailored_resume(tailored, experience_bank)
         if not violations:
             return _reorder_to_match_bank(tailored, experience_bank)

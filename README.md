@@ -17,22 +17,31 @@ python main.py           # run either path from the CLI
 
 ## What's real vs. stubbed right now
 
-Everything **runs end-to-end**, including the actual agent tool-use loop
-against the Anthropic API — but the content-generation tools return
-`[STUB]` placeholders so you can verify the control flow / architecture
-before spending effort on the generation quality. Fill these in roughly
-in this order:
+Everything **runs end-to-end** against a real LLM (Anthropic if
+`ANTHROPIC_API_KEY` is set, Groq as a free fallback otherwise — see
+`tools/llm_utils.py`). No content-generation stubs remain:
 
-1. `tools/application_tools.py::fetch_job_posting` — real scraping
-   (requests + trafilatura), wrapped in retry/backoff.
-2. `tools/application_tools.py::diff_resume` and `draft_cover_letter` —
-   real single LLM calls (these do NOT need to be agentic — see below).
-3. `tools/interview_prep_tools.py::fetch_company_info` — real web search.
-4. `tools/interview_prep_tools.py::generate_questions` — real LLM call.
-5. Everything else (`upsert_application`, `record_result`,
-   `get_weak_spots`, the agent loop itself) is already fully functional
-   logic, not stubbed — it's the content-generation steps that are
-   placeholders.
+- `tools/application_tools.py::fetch_job_posting` — real scraping
+  (requests + trafilatura), wrapped in retry/backoff.
+- `tools/application_tools.py::diff_resume` — real LLM call, scores JD
+  fit against `experience_bank.json` (a hand-maintained list of
+  jobs/projects/ECs to pick bullets from — not just a single resume).
+- `tools/application_tools.py::optimize_resume_bullets` — real LLM call,
+  tailors bullets to a JD with code-level validation (no fabricated
+  bullets/numbers, ~2-line cap, one-page budget) and automatic retry.
+- `tools/interview_prep_tools.py::fetch_company_info` — real LLM call
+  grounded in the model's own knowledge (not live search - a live search
+  needs a paid API or gets bot-blocked on the free options).
+- `tools/interview_prep_tools.py::generate_questions` — real LLM call.
+- `upsert_application`, `record_result`, `get_weak_spots`, both agent
+  loops — already fully functional logic, not stubbed.
+
+`draft_cover_letter` was removed rather than implemented — decided it
+wasn't worth building.
+
+`agent/interview_agent_langgraph.py` is a from-scratch LangGraph
+reimplementation of the interview agent's tool-use loop, kept side by
+side with the original hand-rolled version for comparison.
 
 ## Why the workflow/agent split
 
