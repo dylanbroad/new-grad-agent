@@ -30,7 +30,7 @@ def _browse_new_grad_postings():
     print(f"\n--- {len(jd_text)} chars ---")
     print(jd_text[:1000])
 
-    run_full = input("\nRun full intake (similarity score + bullet tailoring + cover letter)? [y/N]: ").strip().lower()
+    run_full = input("\nRun full intake (similarity score + bullet tailoring)? [y/N]: ").strip().lower()
     if run_full == "y":
         run_application_intake(company=posting["company"], role=posting["role"], url=posting["url"])
 
