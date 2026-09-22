@@ -55,7 +55,7 @@ def quiz_user(question: dict) -> dict:
 
 
 @logged_tool
-def record_result(company: str | None, topic: str, result: str, review_in_days: int = 3) -> dict:
+def record_result(topic: str, result: str, company: str | None = None, review_in_days: int = 3) -> dict:
     """Upsert a weak_spots row. result should be 'correct' | 'partial' | 'incorrect'.
 
     Idempotent on (company, topic): repeated calls update attempts/last_result
