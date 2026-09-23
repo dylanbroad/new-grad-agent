@@ -11,6 +11,7 @@ _MIGRATIONS = [
     "ALTER TABLE applications ADD COLUMN similarity_score INTEGER",
     "ALTER TABLE applications ADD COLUMN tailored_resume TEXT",
     "ALTER TABLE applications DROP COLUMN cover_letter_path",
+    "ALTER TABLE applications ADD COLUMN resume_pdf_path TEXT",
 ]
 
 def init_db() -> None:

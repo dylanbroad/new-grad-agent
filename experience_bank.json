@@ -15,11 +15,11 @@
       "details": "Relevant Courses: Operating Systems (C), Computer Networks (Python), Database Systems (SQL), Compilers (Java), Systems Programming and Concurrency (C), Data Structures and Algorithms (C++), Object Oriented Programming (C++)"
     }
   ],
-  "skills": [
-    "Python", "C++", "C", "TypeScript", "JavaScript", "SQL", "Go",
-    "Django", "Flask", "FastAPI", "React", "Node.js", "Next.js", "Tailwind",
-    "Docker", "PostgreSQL", "Azure Data Explorer", "AWS", "Datadog", "Firebase", "Vercel", "Git"
-  ],
+  "skills": {
+    "Languages": ["Python", "C++", "C", "TypeScript", "JavaScript", "SQL", "Go"],
+    "Frameworks": ["Django", "Flask", "FastAPI", "React", "Node.js", "Next.js", "Tailwind"],
+    "Technologies": ["Docker", "PostgreSQL", "Azure Data Explorer", "AWS", "Datadog", "Firebase", "Vercel", "Git"]
+  },
   "jobs": [
     {
       "company": "Microsoft",

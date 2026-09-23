@@ -123,8 +123,12 @@ def render_experience_bank_text(experience_bank: dict) -> str:
     """Flatten the experience bank into plain text for prompting the LLM."""
     lines = []
 
-    skills = experience_bank.get("skills") or []
-    if skills:
+    skills = experience_bank.get("skills") or {}
+    if isinstance(skills, dict):
+        for category, items in skills.items():
+            if items:
+                lines.append(f"{category}: {', '.join(items)}")
+    elif skills:
         lines.append("Skills: " + ", ".join(skills))
 
     for job in experience_bank.get("jobs", []):
@@ -380,6 +384,7 @@ def upsert_application(
     resume_diff: str = "",
     similarity_score: int | None = None,
     tailored_resume: str = "",
+    resume_pdf_path: str = "",
 ) -> dict:
     """Idempotent insert/update keyed on url_hash - re-adding the same
     posting updates the row instead of creating a duplicate.
@@ -388,18 +393,31 @@ def upsert_application(
     with get_conn() as conn:
         conn.execute(
             """INSERT INTO applications
-                   (company, role, url, url_hash, jd_text, resume_diff, similarity_score, tailored_resume)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   (company, role, url, url_hash, jd_text, resume_diff, similarity_score,
+                    tailored_resume, resume_pdf_path)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(url_hash) DO UPDATE SET
                    jd_text = excluded.jd_text,
                    resume_diff = excluded.resume_diff,
                    similarity_score = excluded.similarity_score,
                    tailored_resume = excluded.tailored_resume,
+                   resume_pdf_path = excluded.resume_pdf_path,
                    updated_at = datetime('now')""",
-            (company, role, url, url_hash, jd_text, resume_diff, similarity_score, tailored_resume),
+            (company, role, url, url_hash, jd_text, resume_diff, similarity_score, tailored_resume, resume_pdf_path),
         )
         row = conn.execute("SELECT * FROM applications WHERE url_hash = ?", (url_hash,)).fetchone()
     return dict(row)
+
+
+@logged_tool
+def get_seen_urls() -> set:
+    """All posting URLs already saved to applications, regardless of
+    status - lets a batch run skip postings it's already processed
+    instead of re-fetching/re-scoring them every time.
+    """
+    with get_conn() as conn:
+        rows = conn.execute("SELECT url FROM applications").fetchall()
+    return {row["url"] for row in rows}
 
 
 @logged_tool

@@ -10,9 +10,11 @@ project, not an accident.
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=your-key-here
+export ANTHROPIC_API_KEY=your-key-here   # or GROQ_API_KEY for free ad hoc testing
 python db.py            # creates copilot.db from schema.sql
 python main.py           # run either path from the CLI
+
+python batch_runner.py   # one-shot: scrape SimplifyJobs, process anything not seen before
 ```
 
 ## What's real vs. stubbed right now
@@ -29,6 +31,16 @@ Everything **runs end-to-end** against a real LLM (Anthropic if
 - `tools/application_tools.py::optimize_resume_bullets` — real LLM call,
   tailors bullets to a JD with code-level validation (no fabricated
   bullets/numbers, ~2-line cap, one-page budget) and automatic retry.
+- `tools/resume_render.py::render_resume_pdf` — renders the tailored
+  bullets into an actual submittable one-page PDF (xhtml2pdf, pure
+  Python, no system deps), written to `output/resumes/`. Dates,
+  locations, and job titles are always pulled from `experience_bank.json`
+  rather than the model's output - only the bullets themselves are
+  LLM-generated.
+- `batch_runner.py` — one-shot automation: scrapes SimplifyJobs, skips
+  postings already in the DB (`get_seen_urls`), processes whatever's new
+  (capped per run, rate-limited between postings), no interactive gate.
+  Not a daemon - run it yourself or schedule it with cron/launchd.
 - `tools/interview_prep_tools.py::fetch_company_info` — real LLM call
   grounded in the model's own knowledge (not live search - a live search
   needs a paid API or gets bot-blocked on the free options).
@@ -78,6 +90,7 @@ sqlite3 copilot.db "SELECT tool_name, success, latency_ms, created_at FROM tool_
   before the interview.
 - `main.py`'s router is intentionally a plain if/elif, not a supervisor
   agent — see the module docstring for why.
-- Nothing here handles concurrent/parallel tool calls yet (e.g. batch-
-  checking several job postings) — a good place to add the
-  asyncio + bounded-semaphore pattern from the coding-practice sheet.
+- `batch_runner.py` processes postings sequentially with a fixed delay
+  between them - nothing here does concurrent/parallel tool calls yet.
+  A good place to add the asyncio + bounded-semaphore pattern from the
+  coding-practice sheet if the backlog ever makes sequential too slow.

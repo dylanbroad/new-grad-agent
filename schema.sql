@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS applications (
     resume_diff        TEXT,
     similarity_score   INTEGER,
     tailored_resume    TEXT,
+    resume_pdf_path    TEXT,
     created_at         TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );

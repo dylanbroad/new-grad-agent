@@ -3,3 +3,4 @@ copilot.db
 __pycache__/
 *.pyc
 .venv/
+output/
