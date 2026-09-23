@@ -421,6 +421,30 @@ def get_seen_urls() -> set:
 
 
 @logged_tool
+def list_applications(status: str | None = None, min_similarity: int | None = None) -> list[dict]:
+    """Browse saved applications, optionally filtered by status and/or a
+    minimum similarity score. Ordered best-match first so the strongest
+    candidates from a batch run surface at the top.
+    """
+    query = "SELECT * FROM applications"
+    conditions = []
+    params: list = []
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if min_similarity is not None:
+        conditions.append("similarity_score >= ?")
+        params.append(min_similarity)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY similarity_score DESC, created_at DESC"
+
+    with get_conn() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+@logged_tool
 def set_application_status(url: str, status: str) -> dict:
     """Move an application through found -> applied -> interviewing -> offer/rejected."""
     url_hash = _hash_url(url)
