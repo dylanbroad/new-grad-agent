@@ -83,10 +83,3 @@ Every tool call (both workflow and agent side) is logged to `tool_call_log` via 
 ```bash
 sqlite3 copilot.db "SELECT tool_name, success, latency_ms, created_at FROM tool_call_log ORDER BY id DESC LIMIT 20;"
 ```
-
-## Known limitations
-
-- No test suite yet.
-- `agent/interview_agent.py` (the hand-rolled version) is Anthropic-only — its loop is built around Anthropic's specific message format, and porting it to also support Groq would mean branching the whole message-passing logic, not just swapping a client. The LangGraph version already supports both.
-- `batch_runner.py` processes postings sequentially with a fixed delay — no concurrency yet. A good place for `asyncio` + a bounded semaphore if the backlog ever gets large enough to need it.
-- The experience bank currently mirrors one resume 1:1 — the bullet-tailoring logic already supports selecting a subset from a richer bank, but the bank itself doesn't have extra projects/extracurriculars in it yet.
