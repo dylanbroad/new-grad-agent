@@ -1,96 +1,92 @@
 # Job Search Copilot
 
-A deliberately mixed system: an **Application workflow** (fixed control
-flow) and an **Interview Prep agent** (model directs its own tool use).
-See `agent/interview_agent.py` and `workflow/application_workflow.py` for
-the two contrasting implementations — that contrast is the point of the
-project, not an accident.
+A local, single-user CLI tool that automates the new-grad software engineering job search:
 
-## Setup
+1. **Scrapes** open new-grad postings from [SimplifyJobs/New-Grad-Positions](https://github.com/SimplifyJobs/New-Grad-Positions), a public GitHub repo updated daily.
+2. **Scores** how well my actual work experience matches each job description, using an LLM.
+3. **Tailors** resume bullets to the specific JD when the match is strong enough — by selecting and rewording bullets I actually have, never inventing new claims.
+4. **Renders** the tailored resume into an actual submittable one-page PDF.
+5. **Tracks** everything in a local SQLite database, so I can review results, track application status, and avoid reprocessing postings I've already seen.
+
+Separately, it runs an **interview-prep agent** — an adaptive practice session that generates questions, grades my answers, and tracks weak spots to resurface in future sessions.
+
+No cloud hosting, no server — everything runs against a local SQLite file.
+
+## Quickstart
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=your-key-here   # or GROQ_API_KEY for free ad hoc testing
-python db.py            # creates copilot.db from schema.sql
-python main.py           # run either path from the CLI
 
-python batch_runner.py   # one-shot: scrape SimplifyJobs, process anything not seen before
+# Pick one:
+export ANTHROPIC_API_KEY=your-key-here   # primary target
+export GROQ_API_KEY=your-key-here        # free fallback, for ad hoc testing
+
+python db.py             # creates copilot.db from schema.sql
+python main.py            # interactive CLI: add an application, run interview prep,
+                           # browse new postings, or review saved applications
+
+python batch_runner.py    # one-shot: scrape SimplifyJobs, process anything not seen before
 ```
 
-## What's real vs. stubbed right now
+`experience_bank.json` holds the actual content the resume gets built from — jobs, projects, education, skills. Edit it by hand to add more to pick from.
 
-Everything **runs end-to-end** against a real LLM (Anthropic if
-`ANTHROPIC_API_KEY` is set, Groq as a free fallback otherwise — see
-`tools/llm_utils.py`). No content-generation stubs remain:
+## Architecture: workflow vs. agent
 
-- `tools/application_tools.py::fetch_job_posting` — real scraping
-  (requests + trafilatura), wrapped in retry/backoff.
-- `tools/application_tools.py::diff_resume` — real LLM call, scores JD
-  fit against `experience_bank.json` (a hand-maintained list of
-  jobs/projects/ECs to pick bullets from — not just a single resume).
-- `tools/application_tools.py::optimize_resume_bullets` — real LLM call,
-  tailors bullets to a JD with code-level validation (no fabricated
-  bullets/numbers, ~2-line cap, one-page budget) and automatic retry.
-- `tools/resume_render.py::render_resume_pdf` — renders the tailored
-  bullets into an actual submittable one-page PDF (xhtml2pdf, pure
-  Python, no system deps), written to `output/resumes/`. Dates,
-  locations, and job titles are always pulled from `experience_bank.json`
-  rather than the model's output - only the bullets themselves are
-  LLM-generated.
-- `batch_runner.py` — one-shot automation: scrapes SimplifyJobs, skips
-  postings already in the DB (`get_seen_urls`), processes whatever's new
-  (capped per run, rate-limited between postings), no interactive gate.
-  Not a daemon - run it yourself or schedule it with cron/launchd.
-- `tools/interview_prep_tools.py::fetch_company_info` — real LLM call
-  grounded in the model's own knowledge (not live search - a live search
-  needs a paid API or gets bot-blocked on the free options).
-- `tools/interview_prep_tools.py::generate_questions` — real LLM call.
-- `upsert_application`, `record_result`, `get_weak_spots`, both agent
-  loops — already fully functional logic, not stubbed.
+The core design idea of this project is having one clean example of each of Anthropic's two agentic patterns, built side by side on purpose:
 
-`draft_cover_letter` was removed rather than implemented — decided it
-wasn't worth building.
+- **`workflow/application_workflow.py`** — the job-application pipeline. A **fixed control-flow function**: fetch the JD, score the match, then a plain `if` statement (not the model) decides whether to spend the extra LLM call tailoring bullets and rendering a resume, then persist. The LLM generates *content* (a score, tailored text) but never decides what the program does next — that's hardcoded, because the sequence never actually varies.
+- **`agent/interview_agent.py`** — the interview-prep session. A **while-loop where the model decides** which tool to call, in what order, and when to stop. Handed a system prompt and five tools (check weak spots, generate questions, quiz the user, grade an answer, record the result), it runs a genuinely adaptive session, because a real prep session's shape depends on how the conversation actually goes.
 
-`agent/interview_agent_langgraph.py` is a from-scratch LangGraph
-reimplementation of the interview agent's tool-use loop, kept side by
-side with the original hand-rolled version for comparison.
+Workflows are for tasks whose steps are already fully known in advance; agents are for tasks where the path genuinely depends on what happens as you go. Forcing the application pipeline to be "agentic" would just add cost and unpredictability for a sequence that never changes.
 
-## Why the workflow/agent split
+## Project structure
 
-Per Anthropic's own definition: workflows are predefined code paths;
-agents are systems where the model directs its own process and tool
-use. `application_workflow.py` is a fixed `step1 -> step2 -> step3`
-function — correct, because the path never varies. `interview_agent.py`
-is a `while` loop where the model picks which tool to call and decides
-when the session is over — correct, because a real prep session's shape
-genuinely depends on how the conversation goes.
+```
+main.py                          # interactive CLI — plain if/elif router
+batch_runner.py                  # one-shot automation: process new postings unattended
+mcp_server.py                    # exposes the tools as an MCP server
+db.py / schema.sql                # SQLite: applications, weak_spots, tool_call_log
+experience_bank.json             # hand-maintained: jobs/projects/education/skills
 
-Resist the urge to make `application_workflow.py` "agentic" for its own
-sake — that would be exactly the kind of over-engineering the source
-architecture doc warns against for a task whose steps are already fully
-known in advance.
+workflow/application_workflow.py       # fixed application pipeline
+agent/interview_agent.py               # hand-rolled interview-prep agent loop
+agent/interview_agent_langgraph.py     # same agent, reimplemented in LangGraph (comparison)
+
+tools/application_tools.py       # scraping, similarity scoring, bullet tailoring, DB writes
+tools/interview_prep_tools.py    # company research, question generation, quizzing, weak spots
+tools/resume_render.py           # tailored bullets -> actual PDF
+tools/llm_utils.py               # shared Anthropic/Groq dual-provider LLM-call plumbing
+tools/logging_utils.py           # @logged_tool decorator - wraps every call with observability
+```
+
+## Tech stack
+
+- **LLM:** Anthropic API (Claude), with Groq (free, OpenAI-compatible) as an automatic fallback for testing without a paid key — see `tools/llm_utils.py`
+- **Scraping:** `requests` + `trafilatura` (falls back to raw `BeautifulSoup` extraction), retried with backoff
+- **PDF generation:** `xhtml2pdf` — pure Python, no system dependencies
+- **DB:** SQLite, no ORM
+- **Agent frameworks:** a hand-rolled Anthropic tool-use loop and a LangGraph (`StateGraph`/`ToolNode`) reimplementation of the same agent, kept side by side
+- **MCP:** the application-workflow tools are also exposed as an MCP server, so any MCP client can drive the pipeline without importing this codebase directly
+
+## A few notable design decisions
+
+- **Bullet tailoring is validated in code, not just by prompt instruction.** The model is checked (not trusted) to never output more bullets than the source data has, never introduce a number/metric that isn't in the original bullet, stay under a length cap (~2 lines), and keep the whole resume under a one-page bullet budget. Violations trigger an automatic retry with the specific failures fed back to the model.
+- **Dates, locations, and job titles in the rendered PDF always come from `experience_bank.json`, never from the model.** Only the bullet text itself is ever LLM-authored in the final document.
+- **`fetch_company_info` is honest about not being live search.** A live web-search attempt (scraping DuckDuckGo's HTML results, no API key) got blocked as "anomalous traffic," so the tool uses the model's own knowledge instead and labels itself accordingly rather than pretending to be fresher than it is.
+- **`batch_runner.py` is a one-shot script, not a daemon.** It dedupes against what's already in the DB, rate-limits itself between postings, and never blocks on interactive input — run it manually or schedule it yourself (cron/launchd).
 
 ## Observability
 
-Every tool call (both workflow and agent side) is logged to
-`tool_call_log` via the `@logged_tool` decorator in
-`tools/logging_utils.py` — tool name, args, latency, success/failure.
-Query it directly for now:
+Every tool call (both workflow and agent side) is logged to `tool_call_log` via the `@logged_tool` decorator — tool name, args, latency, success/failure:
 
 ```bash
 sqlite3 copilot.db "SELECT tool_name, success, latency_ms, created_at FROM tool_call_log ORDER BY id DESC LIMIT 20;"
 ```
 
-## Next steps / open design questions
+## Known limitations
 
-- Interview agent stopping condition currently relies entirely on the
-  system prompt telling the model to use judgment. Watch for it hitting
-  `MAX_TURNS` in practice — if it does often, that's a real signal the
-  prompt needs tightening, and a good thing to have observed and fixed
-  before the interview.
-- `main.py`'s router is intentionally a plain if/elif, not a supervisor
-  agent — see the module docstring for why.
-- `batch_runner.py` processes postings sequentially with a fixed delay
-  between them - nothing here does concurrent/parallel tool calls yet.
-  A good place to add the asyncio + bounded-semaphore pattern from the
-  coding-practice sheet if the backlog ever makes sequential too slow.
+- No test suite yet.
+- `agent/interview_agent.py` (the hand-rolled version) is Anthropic-only — its loop is built around Anthropic's specific message format, and porting it to also support Groq would mean branching the whole message-passing logic, not just swapping a client. The LangGraph version already supports both.
+- `batch_runner.py` processes postings sequentially with a fixed delay — no concurrency yet. A good place for `asyncio` + a bounded semaphore if the backlog ever gets large enough to need it.
+- The experience bank currently mirrors one resume 1:1 — the bullet-tailoring logic already supports selecting a subset from a richer bank, but the bank itself doesn't have extra projects/extracurriculars in it yet.
